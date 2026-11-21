@@ -37,7 +37,8 @@ const cqrs = initializeCqrs({
   components: APP_COMPONENTS,
 });
 
-app.use(attachCqrs(cqrs));
+// No-argument form uses getCqrsModule().
+app.use(attachCqrs());
 
 registerEventStorming(app);
 
@@ -75,7 +76,7 @@ const cqrs = initializeCqrs({
   components: APP_COMPONENTS,
 });
 
-app.use(attachCqrs(cqrs));
+app.use(attachCqrs());
 registerEventStorming(app);
 ```
 
@@ -169,7 +170,7 @@ const cqrs = initializeCqrs({
   },
 });
 
-app.use(attachCqrs(cqrs));
+app.use(attachCqrs());
 registerEventStorming(app);
 ```
 

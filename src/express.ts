@@ -13,6 +13,7 @@ import type { CqrsModule } from "./module.ts";
 import type { ApplicationEventPublisher } from "./events.ts";
 import type { CommandBus } from "./commandBus.ts";
 import type { QueryBus } from "./queryBus.ts";
+import { getCqrsModule } from "./runtime.ts";
 
 declare global {
   namespace Express {
@@ -43,13 +44,21 @@ export type CqrsModuleProvider = () => CqrsModule;
  * application must create it lazily. The provider closes over the application's
  * own dependencies; the package does not need a global getter.
  */
+export function attachCqrs(): RequestHandler;
 export function attachCqrs(
   moduleOrProvider: CqrsModule | CqrsModuleProvider,
+  options?: AttachCqrsOptions,
+): RequestHandler;
+export function attachCqrs(
+  moduleOrProvider?: CqrsModule | CqrsModuleProvider,
   options: AttachCqrsOptions = {},
 ): RequestHandler {
-  const resolve = typeof moduleOrProvider === "function"
-    ? moduleOrProvider
-    : () => moduleOrProvider;
+  const resolve =
+    moduleOrProvider === undefined
+      ? getCqrsModule
+      : typeof moduleOrProvider === "function"
+        ? moduleOrProvider
+        : () => moduleOrProvider;
 
   return (req, res, next) => {
     const module = resolve();
