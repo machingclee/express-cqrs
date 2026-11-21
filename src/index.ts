@@ -76,7 +76,17 @@ export type { AttachCqrsOptions, CqrsModuleProvider } from "./express.ts";
 
 export { initializeCqrs, getCqrsModule } from "./runtime.ts";
 
-export { registerEventStorming } from "./event-storming/router.ts";
+export {
+  EVENT_STORMING_URL_PATH,
+  eventStormingUrl,
+  registerEventStorming,
+} from "./event-storming/router.ts";
+export type {
+  EventStormingRouteConfig,
+  EventStormingRouteRegistrar,
+  EventStormingUrl,
+  RegisterEventStormingOptions,
+} from "./event-storming/router.ts";
 
 export { typeNameOf } from "./metadata.ts";
 

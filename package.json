@@ -1,6 +1,6 @@
 {
   "name": "express-prisma-cqrs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dependency-free CQRS runtime for Express applications with explicit decorators, DI, transactions, audit ports and an optional event-storming UI.",
   "type": "module",
   "license": "MIT",
