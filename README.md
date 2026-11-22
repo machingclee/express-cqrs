@@ -6,7 +6,6 @@ A small CQRS runtime for Express applications.
 
 - [Features](#features)
 - [Install](#install)
-- [Upgrading from `express-prisma-cqrs`](#upgrading-from-express-prisma-cqrs)
 - [Agent skill](#agent-skill)
 - [Normal Express app](#normal-express-app)
 - [`createCqrs` vs `initializeCqrs`](#createcqrs-vs-initializecqrs)
@@ -46,25 +45,6 @@ A small CQRS runtime for Express applications.
 ```bash
 npm install @machingclee/express-cqrs
 ```
-
-## Upgrading from `express-prisma-cqrs`
-
-The package was renamed. Only the dependency name and the import specifier
-change; the API is the same apart from the audit record, which no longer carries
-a `kind` field (`type` already names the command or event).
-
-```bash
-npm uninstall express-prisma-cqrs
-npm install @machingclee/express-cqrs
-```
-
-```diff
-- import { Command, CommandHandler } from "express-prisma-cqrs";
-+ import { Command, CommandHandler } from "@machingclee/express-cqrs";
-```
-
-If your audit table has a `kind` column, drop it; the row shape below never
-reads it.
 
 ## Agent skill
 
@@ -169,31 +149,31 @@ import {
   type CommandContext,
 } from "@machingclee/express-cqrs";
 
-class CreateNote extends Command<string> {
+class CreateNoteCommand extends Command<string> {
   constructor(readonly text: string) {
     super();
   }
 }
 
-class NoteCreated extends DomainEvent {
+class NoteCreatedEvent extends DomainEvent {
   constructor(readonly id: string) {
     super();
   }
 }
 
-@CommandHandler(CreateNote, {
+@CommandHandler(CreateNoteCommand, {
   inject: [],
-  emits: [NoteCreated],
+  emits: [NoteCreatedEvent],
 })
-class CreateNoteHandler {
-  async handle(command: CreateNote, context: CommandContext): Promise<string> {
+class CreateNoteCommandHandler {
+  async handle(command: CreateNoteCommand, context: CommandContext): Promise<string> {
     const id = crypto.randomUUID();
-    context.events.add(new NoteCreated(id));
+    context.events.add(new NoteCreatedEvent(id));
     return id;
   }
 }
 
-export const APP_COMPONENTS = [CreateNoteHandler];
+export const APP_COMPONENTS = [CreateNoteCommandHandler];
 ```
 
 ## Audit
@@ -454,11 +434,11 @@ const cqrs = createCqrs({
   auditEventRepository: audit,
 });
 
-await cqrs.commandBus.send(new CreateNote("hello"));
+await cqrs.commandBus.send(new CreateNoteCommand("hello"));
 
 const batch = audit.batches.at(-1);
 console.log(batch?.records.map((record) => `${record.order}:${record.type}`));
-// [ "0:CreateNote", "1:NoteCreated" ]
+// [ "0:CreateNoteCommand", "1:NoteCreatedEvent" ]
 ```
 
 ### Using the committed flag
