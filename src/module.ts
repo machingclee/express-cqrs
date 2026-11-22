@@ -15,7 +15,13 @@ import type { RegisteredCommandHandler } from "./commandBus.ts";
 import { Container, InjectionToken } from "./container.ts";
 import type { Token } from "./container.ts";
 import { ApplicationEventPublisher } from "./events.ts";
-import type { CommandFlow, CqrsFlow, PolicyFlow, QueryFlow } from "./flow.ts";
+import type {
+  CommandFlow,
+  CqrsFlow,
+  PolicyFlow,
+  PolicyListenerFlow,
+  QueryFlow,
+} from "./flow.ts";
 import { classMetaOf, hasDomainMetadata, methodMetaOf } from "./metadata.ts";
 import type { CqrsClassMeta, EventListenerMeta, PayloadMeta } from "./metadata.ts";
 import { QueryBus } from "./queryBus.ts";
@@ -246,12 +252,14 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
     if (meta.policy) {
       const listensTo = new Set<string>();
       const sends = new Set<string>();
+      const policyListeners: PolicyListenerFlow[] = [];
       for (const listener of listeners) {
         defineEvent(
           listener.meta.event,
           `${component.name}.${listener.name} listens to ${eventNameOf(listener.meta.event)}`,
         );
         listensTo.add(eventNameOf(listener.meta.event));
+        const listenerSends: string[] = [];
         for (const sentCommand of listener.meta.sends) {
           if (!(sentCommand.prototype instanceof Command)) {
             errors.push(
@@ -260,7 +268,13 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
             );
           }
           sends.add(sentCommand.name);
+          listenerSends.push(sentCommand.name);
         }
+        policyListeners.push({
+          event: eventNameOf(listener.meta.event),
+          sends: listenerSends.sort(),
+          rules: [...(methodMetaOf(component.prototype[listener.name])?.invariants ?? [])],
+        });
       }
       // A policy that opts out of the flow is still wired up; the graph just
       // leaves it (and its invariants) out.
@@ -269,6 +283,9 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
           name: component.name,
           listensTo: [...listensTo].sort(),
           sends: [...sends].sort(),
+          // One entry per @EventListener method: the unions above cannot pair
+          // an event with the command that reaction sends, this can.
+          listeners: policyListeners,
         });
       }
     } else if (listeners.length > 0) {

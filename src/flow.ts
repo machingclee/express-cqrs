@@ -28,10 +28,31 @@ export interface QueryFlow {
   payload: Record<string, string>;
 }
 
+/**
+ * One `@EventListener` method of a policy: the event it reacts to, the commands
+ * that reaction dispatches, and the `@Invariant` rules on that method.
+ */
+export interface PolicyListenerFlow {
+  event: string;
+  sends: string[];
+  rules: string[];
+}
+
 export interface PolicyFlow {
   name: string;
   listensTo: string[];
   sends: string[];
+  /**
+   * One entry per `@EventListener` method, in declaration order.
+   *
+   * `listensTo` and `sends` are the unions of these reactions, so on their own
+   * they cannot say *which* event leads to *which* command. This list is the
+   * pairing: a policy that listens to two events gets two entries, and the
+   * event-storming diagram draws a rule row per routing from it. A policy with
+   * a single listener may omit it and older payloads do; consumers then fall
+   * back to the unions.
+   */
+  listeners?: PolicyListenerFlow[];
 }
 
 export interface EventFlow {

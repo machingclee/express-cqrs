@@ -1,6 +1,6 @@
 {
   "name": "@machingclee/express-cqrs",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "description": "Dependency-free CQRS runtime for Express applications with explicit decorators, DI, transactions, audit ports and an optional event-storming UI.",
   "type": "module",
   "license": "MIT",
@@ -19,6 +19,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && rm -rf dist/event-storming/public && mkdir -p dist/event-storming/public && cp -R src/event-storming/public/. dist/event-storming/public/",
+    "build:event-storming": "cd event-storming && npm run build",
+    "dev:event-storming": "cd event-storming && npm run dev",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "publish": "npm publish --access public",

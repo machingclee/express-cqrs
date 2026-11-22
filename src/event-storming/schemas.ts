@@ -50,6 +50,18 @@ export const CqrsFlowSchema = z.object({
       name: z.string(),
       listensTo: z.array(z.string()),
       sends: z.array(z.string()),
+      listeners: z
+        .array(
+          z.object({
+            event: z.string(),
+            sends: z.array(z.string()),
+            rules: z.array(z.string()),
+          }),
+        )
+        .optional()
+        .describe(
+          "One entry per @EventListener method: the event → commands pairing the unions above lose",
+        ),
     }),
   ),
   events: z.array(

@@ -94,6 +94,22 @@ This gives you:
 The event-storming routes use the process-wide module from `getCqrsModule()`.
 That is why this example uses `initializeCqrs`.
 
+### The diagram itself
+
+`/event-storming` serves a static bundle committed at `src/event-storming/public`.
+It is built by the `event-storming/` project at the root of this repository — a
+Vite app, kept out of `src/` so it never enters the package's TypeScript build:
+
+```bash
+npm run dev:event-storming     # HMR on http://localhost:5183, proxying /docs
+npm run build:event-storming   # vite writes src/event-storming/public
+npm run build                  # tsc + copy that folder into dist/
+```
+
+The page reads `GET /docs/commands` from whatever host app serves it, so it always
+draws the running domain model; double-clicking a node copies its name, and
+`▸ Schema (n)` opens a node's payload fields.
+
 ## `createCqrs` vs `initializeCqrs`
 
 Use `createCqrs` when you do not need the global runtime:
