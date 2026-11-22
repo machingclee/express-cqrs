@@ -1,16 +1,23 @@
 /**
- * Audit trail port.
+ * Audit trail ports.
  *
  * The library records one row per command and one per domain event, but knows
- * nothing about storage. The application supplies an `AuditWriter`
- * (Prisma/SQLite today, any other database later) and decides the table and
- * column types. `MemoryAuditWriter` exists for tests and local experiments.
+ * nothing about storage.
+ *
+ * An application implements `AuditEventRepository` (`save(batch)`) and passes it
+ * to `createCqrs` / `initializeCqrs` as `auditEventRepository`. The library
+ * wraps that object with `AuditEventRepositoryWriter`, which adapts it to the
+ * `AuditWriter` (`write(batch)`) port the command bus calls. Implement the
+ * repository side; the writer side exists so the bus does not need to know
+ * whether the rows land in Prisma, SQL, a file or an external service.
+ *
+ * `NoopAuditEventRepository` covers "no audit store", and
+ * `MemoryAuditEventRepository` covers tests. The writer-shaped twins
+ * (`NoopAuditWriter`, `MemoryAuditWriter`) are for consumers that register an
+ * `AUDIT_WRITER` value in the container themselves.
  */
 
-export type AuditKind = "command" | "event";
-
 export interface AuditRecord {
-  kind: AuditKind;
   /** Command/event class name, the same vocabulary the flow graph uses. */
   type: string;
   /** JSON payload, already serialized and length-capped by the library. */

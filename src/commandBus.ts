@@ -211,7 +211,6 @@ export class CommandBus {
 
   private startCommandRecord(context: RequestContext, command: object): AuditRecord {
     const record: AuditRecord = {
-      kind: "command",
       type: typeNameOf(command),
       payload: serializePayload(command),
       order: nextAuditOrder(context),
@@ -230,7 +229,6 @@ export class CommandBus {
     this.onDomainEvent?.(event.constructor as Constructor);
 
     const record: AuditRecord = {
-      kind: "event",
       type: typeNameOf(event),
       payload: serializePayload(event),
       order: nextAuditOrder(context),

@@ -52,7 +52,15 @@ export type { RequestContext } from "./context.ts";
 export { ApplicationEventPublisher, EventQueue } from "./events.ts";
 export type { CommandContext, DispatchTiming, EventWrapper } from "./events.ts";
 
-export { MemoryAuditWriter } from "./audit.ts";
+export {
+  AuditEventRepositoryWriter,
+  MemoryAuditEventRepository,
+  MemoryAuditWriter,
+  NoopAuditEventRepository,
+  NoopAuditWriter,
+  formatFailure,
+  serializePayload,
+} from "./audit.ts";
 export type {
   AuditBatch,
   AuditEventRepository,
