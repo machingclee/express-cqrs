@@ -1,4 +1,4 @@
-# express-prisma-cqrs
+# express-cqrs
 
 A small CQRS runtime for Express applications.
 
