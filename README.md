@@ -48,19 +48,16 @@ npm install @machingclee/express-cqrs
 
 ## Agent skill
 
-The workflow in this README is also packaged as an agent skill, so an agent can follow the conventions instead of rediscovering them: <https://github.com/machingclee/my-skills/tree/main/express--cqrs>
+The workflow in this README is also packaged as an agent skill: <https://github.com/machingclee/my-skills/tree/main/express--cqrs>
 
-Install it for Claude Code, either for every project or for one repository:
+Install it with the skills CLI, either into this project or for every project:
 
 ```bash
-mkdir -p ~/.claude/skills .claude/skills
-git clone --depth 1 https://github.com/machingclee/my-skills.git /tmp/my-skills
-cp -R /tmp/my-skills/express--cqrs ~/.claude/skills/    # every project
-cp -R /tmp/my-skills/express--cqrs .claude/skills/      # one project, from its root
-rm -rf /tmp/my-skills
+npx skills add https://github.com/machingclee/my-skills/tree/main/express--cqrs
+npx skills add https://github.com/machingclee/my-skills/tree/main/express--cqrs -g
 ```
 
-The skill list is read when a session starts, so open a new session afterwards.
+Add `-y` to skip the confirmation prompt, `-s` to pick the skill by name, and `-a claude-code` to target Claude Code only. Restart the session afterwards, because the skill list is read at startup.
 
 ## Normal Express app
 
