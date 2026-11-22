@@ -29,6 +29,8 @@ export interface RegisteredCommandHandler {
   readonly handler: ICommandHandler<any, any>;
   readonly handlerClass: Constructor;
   readonly transactionMode: TransactionMode;
+  /** The subset of the handler's `emits` it dispatches after the commit. */
+  readonly afterCommit: readonly Constructor[];
 }
 
 export interface CommandBusOptions {
@@ -137,6 +139,18 @@ export class CommandBus {
     const commandRecord = this.startCommandRecord(context, command);
 
     const queue = new EventQueue((wrapper) => {
+      // The handler declared this event post-commit; `add(...)` would make the
+      // declaration and the diagram wrong, so the call site is rejected.
+      if (
+        wrapper.timing === "immediate" &&
+        registration.afterCommit.includes(wrapper.event.constructor as Constructor)
+      ) {
+        throw new Error(
+          `${typeNameOf(wrapper.event)} is declared in afterCommit on ` +
+            `${registration.handlerClass.name}; enqueue it with ` +
+            `context.events.addTransactional(...) instead of add(...)`,
+        );
+      }
       wrapper.record = this.startEventRecord(context, wrapper.event);
     });
     const handlerContext: CommandContext = {

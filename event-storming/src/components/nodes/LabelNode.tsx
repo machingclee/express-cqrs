@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { flattenSchema } from "../../flow/schema";
+import { AfterCommitIcon } from "../icons";
 import type { LabelNodeData } from "../../flow/layout";
 import type { SchemaLine } from "../../flow/types";
 
@@ -195,6 +196,36 @@ export default function LabelNode({ id, data }: NodeProps<Node<LabelNodeData>>) 
                   </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {data.timing === "post_commit" && (
+            <div
+              title="Every handler that emits this event dispatches it after the commit"
+              style={{
+                marginTop: data.summary || data.httpMethod ? 8 : 6,
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.45)",
+                  borderRadius: "4px",
+                  padding: "1px 7px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.03em",
+                  userSelect: "none",
+                }}
+              >
+                <AfterCommitIcon />
+                Transactional
+              </span>
             </div>
           )}
 

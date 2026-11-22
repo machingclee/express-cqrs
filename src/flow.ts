@@ -15,6 +15,13 @@ export interface CommandFlow {
   actors: string[];
   transaction: "required" | "none";
   emits: string[];
+  /**
+   * The subset of `emits` this handler dispatches after the transaction
+   * commits (`@CommandHandler({ afterCommit: [...] })`). Timing belongs to the
+   * emission, not to the event class: the same event may be immediate from one
+   * handler and deferred from another.
+   */
+  postCommitEmits: string[];
   /** What the client supplies: `field: type`, from `@Payload(...)`. */
   payload: Record<string, string>;
 }

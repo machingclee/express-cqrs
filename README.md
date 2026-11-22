@@ -174,6 +174,32 @@ class CreateNoteCommandHandler {
 export const APP_COMPONENTS = [CreateNoteCommandHandler];
 ```
 
+### Dispatch timing
+
+`context.events.add(event)` dispatches inside the command transaction, so a
+policy can still refuse the command by throwing.
+`context.events.addTransactional(event)` dispatches after the commit, so it
+cannot fail the write.
+
+Timing belongs to the emission, not to the event class — the same event can be
+immediate from one handler and deferred from another — so declare it on the
+handler:
+
+```ts
+@CommandHandler(ArchiveDocumentCommand, {
+  inject: [PrismaUnitOfWork],
+  emits: [DocumentArchivedEvent, DocumentArchivedNoticeEvent],
+  afterCommit: [DocumentArchivedNoticeEvent],
+})
+```
+
+Every `afterCommit` entry must also be in `emits`. The handler then enqueues that
+event with `addTransactional`; `add` throws, so the declaration and the call site
+cannot disagree. `GET /docs/commands` reports the declaration as
+`postCommitEmits`, the event-storming diagram puts a clock on that command → event
+edge, and the event card carries a `Transactional` badge only when every handler
+that emits it defers.
+
 ## Audit
 
 Audit is optional. The bus records one row per command and one row per domain

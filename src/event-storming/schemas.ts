@@ -33,6 +33,9 @@ export const CqrsFlowSchema = z.object({
       actors: z.array(z.string()),
       transaction: z.enum(["required", "none"]),
       emits: z.array(z.string()),
+      postCommitEmits: z
+        .array(z.string())
+        .describe("The subset of emits dispatched with addTransactional (after commit)"),
       payload: PayloadSchema.describe("What the client supplies, from @Payload(...)"),
     }),
   ),
@@ -65,7 +68,11 @@ export const CqrsFlowSchema = z.object({
     }),
   ),
   events: z.array(
-    z.object({ name: z.string(), context: z.string(), payload: PayloadSchema }),
+    z.object({
+      name: z.string(),
+      context: z.string(),
+      payload: PayloadSchema,
+    }),
   ),
   invariants: z.array(
     z.object({

@@ -17,6 +17,8 @@ export interface CommandHandlerMeta {
   command: Constructor;
   inject: Token[];
   emits: Constructor[];
+  /** The subset of `emits` dispatched with `addTransactional`. */
+  afterCommit: Constructor[];
 }
 
 export interface QueryHandlerMeta {

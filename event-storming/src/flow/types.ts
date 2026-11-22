@@ -25,6 +25,8 @@ export interface DomainFlowCommand {
   actors: string[];
   transaction?: "required" | "none";
   emits: string[];
+  /** The subset of `emits` dispatched after the commit (`addTransactional`). */
+  postCommitEmits?: string[];
 }
 
 export interface DomainFlowQuery {
@@ -52,6 +54,14 @@ export interface DomainFlowPolicy {
    */
   listeners?: DomainFlowPolicyListener[];
 }
+
+/**
+ * Timing of an event's emissions, as a card-level summary: `post_commit` when
+ * every handler that emits it defers, `mixed` when some do and some do not.
+ * The diagram marks the individual command → event edges; this only decides
+ * whether the event card itself may claim one answer.
+ */
+export type EventTiming = "immediate" | "post_commit" | "mixed";
 
 export interface DomainFlowEvent {
   name: string;
@@ -173,6 +183,8 @@ export interface CommandModel {
   handler?: string;
   transaction?: string;
   emits: string[];
+  /** The subset of `emits` this handler dispatches after the commit. */
+  postCommitEmits: string[];
   payload: FieldMap;
   summary?: string;
   httpMethod?: string;
@@ -187,6 +199,8 @@ export interface EventModel {
   /** Policies listening to it, including wildcard listeners. */
   listenedBy: string[];
   payload: FieldMap;
+  /** Summary of its emissions; the edges carry the per-emitter truth. */
+  timing: EventTiming;
   /** True when no command emits it, so it arrives from outside the backend. */
   external: boolean;
 }

@@ -175,6 +175,15 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
 
     if (meta.commandHandler) {
       const { command, emits } = meta.commandHandler;
+      const afterCommit = meta.commandHandler.afterCommit ?? [];
+      for (const deferred of afterCommit) {
+        if (!emits.includes(deferred)) {
+          errors.push(
+            `${component.name}: @CommandHandler afterCommit lists ${deferred.name}, ` +
+              `which is not in emits`,
+          );
+        }
+      }
       if (!(command.prototype instanceof Command)) {
         errors.push(`${component.name}: ${command.name} must extend Command<R>`);
       }
@@ -198,6 +207,7 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
           handler: instance as ICommandHandler<any, any>,
           handlerClass: component,
           transactionMode,
+          afterCommit,
         });
         commandFlows.push({
           name: command.name,
@@ -206,6 +216,7 @@ export function createCqrsModule(options: CqrsModuleOptions): CqrsModule {
           actors: [...(classMetaOf(command)?.actors ?? [])],
           transaction: transactionMode,
           emits: emits.map((eventClass) => eventClass.name),
+          postCommitEmits: afterCommit.map((eventClass) => eventClass.name),
           payload: rememberPayload(classMetaOf(command)?.payload),
         });
       }

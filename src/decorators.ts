@@ -33,6 +33,13 @@ export interface CommandHandlerOptions {
   inject?: Token[];
   /** Events the handler emits; used by the flow graph and startup validation. */
   emits?: Constructor<DomainEvent>[];
+  /**
+   * The subset of `emits` this handler dispatches after the transaction
+   * commits (`context.events.addTransactional`). Every entry must also appear
+   * in `emits`. The flow graph marks those emissions, and `add(...)` on one of
+   * them throws, so the declaration and the call site cannot disagree.
+   */
+  afterCommit?: Constructor<DomainEvent>[];
 }
 
 export interface QueryHandlerOptions {
@@ -116,6 +123,7 @@ export function CommandHandler(command: Constructor, options: CommandHandlerOpti
     ensureClassMeta(value).commandHandler = {
       command,
       inject: options.inject ?? [],
+      afterCommit: options.afterCommit ?? [],
       emits: options.emits ?? [],
     };
   };

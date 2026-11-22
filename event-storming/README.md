@@ -163,6 +163,7 @@ Accepted details:
 | `{ "result": { … } }` or `{ "data": { … } }` | unwrapped before normalization |
 | event a command emits but the payload never lists | still drawn, using the emitting command's context |
 | event no command emits | drawn as an **external event** in its declared context (`External` when it declares none) |
+| command `postCommitEmits` | a clock on that command → event edge: the handler dispatches the event after the commit. The event card gets a `Transactional` badge only when every handler that emits it defers, so a mixed event never claims one timing |
 | policy `listensTo: ["DomainEvent"]` | a wildcard listener; its edges sit behind the *wildcard listeners* switch |
 | policy `listeners` | one entry per `@EventListener` method; pairs the event with the commands that reaction sends, so the card can show — and the arrows can hit — the real routing. Without it the card tags every rule with `listensTo[0]` / `sends[0]` |
 | no policies at all | the policy column and its edges simply are not drawn (this backend excludes its development event log via `@Policy({ excludeFromFlow: true })`) |
@@ -217,6 +218,9 @@ actors  →  commands  →  events  →  policies
 - **Command** (blue) — name, handler, `transactional` badge, payload schema.
 - **Event** (orange) — name, who emits it, who listens, payload schema. The
   events of a command sit beside it, so each row reads as one step of the flow.
+  A command → event edge whose emission is declared `afterCommit` carries a clock
+  at its bend, so a delayed side effect is not mistaken for part of the write; the
+  event card adds a `Transactional` badge when every emitter defers.
 - **Policy** (purple) — subscribers, dispatched commands and `@Invariant` rules;
   placed in the band that owns most of the events it listens to. The card gets
   one row per reaction a listener method declares (`listeners` in the payload),

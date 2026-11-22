@@ -28,6 +28,7 @@ import type {
   DtoMap,
   EventModel,
   FieldMap,
+  EventTiming,
   FlowGraph,
   PolicyModel,
   QueryModel,
@@ -57,6 +58,8 @@ export interface LabelNodeData extends Record<string, unknown> {
   icon?: string;
   payload?: FieldMap;
   dtos?: DtoMap;
+  /** `post_commit` for an event dispatched after the command commits. */
+  timing?: EventTiming;
   schemaExpanded?: boolean;
   onToggleSchema?: (nodeId: string) => void;
 }
@@ -212,6 +215,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
     path?: string;
     icon?: string;
     payload?: FieldMap;
+    timing?: EventTiming;
   }): LabelNodeData => ({
     label: input.label,
     summary: input.summary,
@@ -219,6 +223,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
     path: input.path,
     icon: input.icon,
     payload: input.payload,
+    timing: input.timing,
     dtos,
     schemaExpanded: isExpanded(input.id),
     onToggleSchema,
@@ -288,6 +293,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
               id: eventId,
               label: event.name,
               payload: Object.keys(event.payload).length > 0 ? event.payload : undefined,
+              timing: event.timing,
             }),
             position: { x: REL_EVENT_X, y: eventY - groupY },
             parentId: groupId,
@@ -318,6 +324,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
             id: eventId,
             label: event.name,
             payload: Object.keys(event.payload).length > 0 ? event.payload : undefined,
+            timing: event.timing,
           }),
           position: { x: REL_EVENT_X, y: innerY - groupY },
           parentId: groupId,
@@ -558,7 +565,11 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           source: nodeId.command(command.name),
           target: nodeId.event(eventName),
           type: "spreadStep",
-          data: { spread: spreadArrows(command.emits.length, index) },
+          data: {
+            spread: spreadArrows(command.emits.length, index),
+            // Timing belongs to this emission, not to the event type.
+            postCommit: command.postCommitEmits.includes(eventName),
+          },
           animated: true,
           style: { stroke: FLOW_EDGE_COLOR, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: FLOW_EDGE_COLOR },
