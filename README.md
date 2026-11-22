@@ -2,6 +2,32 @@
 
 A small CQRS runtime for Express applications.
 
+## Table of contents
+
+- [Features](#features)
+- [Install](#install)
+- [Upgrading from `express-prisma-cqrs`](#upgrading-from-express-prisma-cqrs)
+- [Agent skill](#agent-skill)
+- [Normal Express app](#normal-express-app)
+- [`createCqrs` vs `initializeCqrs`](#createcqrs-vs-initializecqrs)
+- [A command handler](#a-command-handler)
+- [Audit](#audit)
+  - [What the library guarantees](#what-the-library-guarantees)
+  - [What the repository must guarantee](#what-the-repository-must-guarantee)
+  - [Record shape](#record-shape)
+  - [Suggested table](#suggested-table)
+  - [Example: Prisma](#example-prisma)
+  - [Example: node-postgres](#example-node-postgres)
+  - [Example: mysql2](#example-mysql2)
+  - [Example: a test double](#example-a-test-double)
+  - [Using the committed flag](#using-the-committed-flag)
+  - [Wiring](#wiring)
+- [Prisma transactions](#prisma-transactions)
+- [Authentication](#authentication)
+- [Route conflicts](#route-conflicts)
+- [Scripts](#scripts)
+- [License](#license)
+
 ## Features
 
 - TC39 class and method decorators
@@ -39,6 +65,37 @@ npm install @machingclee/express-cqrs
 
 If your audit table has a `kind` column, drop it; the row shape below never
 reads it.
+
+## Agent skill
+
+An agent skill ships with the package, and it is the fastest way to get an agent to follow these conventions instead of rediscovering them. The skill covers installing the package, wiring `createCqrs`, `attachCqrs` and `registerEventStorming`, opening the command-flow page, adding a command, handler, event, policy, query, service and audit store, and a verification checklist with a pitfalls table.
+
+Source: <https://github.com/machingclee/my-skills/tree/main/express--cqrs>
+
+Install it for Claude Code, or for any agent that reads `~/.claude/skills`:
+
+```bash
+git clone --depth 1 https://github.com/machingclee/my-skills.git /tmp/my-skills
+mkdir -p ~/.claude/skills
+cp -R /tmp/my-skills/express--cqrs ~/.claude/skills/express--cqrs
+rm -rf /tmp/my-skills
+```
+
+A symlink keeps the skill pointed at a checkout, so a `git pull` reaches every later session without another copy:
+
+```bash
+ln -s /path/to/my-skills/express--cqrs ~/.claude/skills/express--cqrs
+```
+
+Copy the folder into `<repo>/.claude/skills/` instead when only one project should see the skill.
+
+The skill list is read when a session starts, so open a new session after installing. Then ask for the feature in the terms the skill describes, such as "add a command that archives a document and emits an event", and the agent loads the conventions on its own. Naming it explicitly, as in "use the express--cqrs skill", forces the same load.
+
+Confirm the install:
+
+```bash
+test -f ~/.claude/skills/express--cqrs/SKILL.md && echo installed
+```
 
 ## Normal Express app
 
