@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { ReactFlowProvider, useReactFlow, type Node } from "@xyflow/react";
 import Toolbar from "./components/Toolbar";
 import FlowCanvas from "./components/FlowCanvas";
 import LoadJsonDialog from "./components/LoadJsonDialog";
@@ -49,6 +49,16 @@ function slugify(title: string): string {
   );
 }
 
+/** What the focus hint calls the node: a context box names its context in full. */
+function nodeTitle(node: Node): string {
+  const data = node.data as { label?: unknown; fullName?: unknown };
+  if (node.type === "groupNode") {
+    if (typeof data.fullName === "string") return data.fullName;
+  }
+  if (typeof data.label === "string") return data.label;
+  return node.id;
+}
+
 function downloadJson(graph: FlowGraph): void {
   const payload = {
     title: graph.title,
@@ -79,6 +89,11 @@ function EventStormingApp() {
     new URLSearchParams(window.location.search).get("tab") === "queries" ? "queries" : "commands",
   );
   const [search, setSearch] = useState("");
+  /**
+   * The card or context box the user clicked. Its neighbours stay bright and
+   * the rest fades; this is the graph explorer's "what touches this?" view.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWildcard, setShowWildcard] = useState(true);
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [focusNonce, setFocusNonce] = useState(0);
@@ -101,6 +116,7 @@ function EventStormingApp() {
     setBootError(null);
     setError(null);
     setSearch("");
+    setSelectedId(null);
     setExpandedSchemas(new Set());
   }, []);
 
@@ -141,7 +157,8 @@ function EventStormingApp() {
     void loadFromEndpoint({ token: value });
   };
 
-  // Geometry only: no search, so typing never moves a card the user has dragged.
+  // Geometry only: no search or selection, so neither typing nor clicking ever
+  // moves a card the user has dragged.
   const layout = useMemo(
     () =>
       buildLayout(graph ?? EMPTY_GRAPH, {
@@ -153,10 +170,54 @@ function EventStormingApp() {
     [graph, tab, showWildcard, expandedSchemas, toggleSchema],
   );
 
-  const focused = useMemo(
-    () => focusGraph(layout.nodes, layout.edges, { search }),
-    [layout, search],
+  // An id that no longer exists (a tab switch, a reload) simply stops focusing.
+  const selectedNode = useMemo(
+    () =>
+      selectedId ? layout.nodes.find((node) => node.id === selectedId) ?? null : null,
+    [layout, selectedId],
   );
+
+  const focused = useMemo(
+    () =>
+      focusGraph(layout.nodes, layout.edges, {
+        search,
+        selected: selectedNode?.id ?? null,
+      }),
+    [layout, search, selectedNode],
+  );
+
+  /**
+   * A click toggles its own focus, so a second click on the same card brings the
+   * whole drawing back. Search and click focus are separate questions, so the
+   * click clears the query rather than leaving a badge that no longer describes
+   * what is lit.
+   */
+  const activateNode = useCallback((node: Node) => {
+    setSelectedId((previous) => (previous === node.id ? null : node.id));
+    setSearch("");
+  }, []);
+
+  const clearFocus = useCallback(() => setSelectedId(null), []);
+
+  /** Typing takes over from a click: matches light up, a click's focus goes. */
+  const changeSearch = useCallback((value: string) => {
+    setSearch(value);
+    setSelectedId(null);
+  }, []);
+
+  // A new graph or tab draws different cards; a stale id must not dim anything.
+  useEffect(() => {
+    setSelectedId(null);
+  }, [graph, tab]);
+
+  // Escape returns the whole drawing, like clicking the background.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const dropFile = async (file: File | undefined) => {
     if (!file) return;
@@ -198,6 +259,8 @@ function EventStormingApp() {
             fitKey={`${sourceLabel}|${tab}|${graph.title}`}
             layoutKey={`${sourceLabel}|${tab}|${showWildcard}|${graph.title}|${[...expandedSchemas].sort().join(",")}`}
             focusNonce={focusNonce}
+            onNodeActivate={activateNode}
+            onClearFocus={clearFocus}
           />
         </>
       ) : bootError ? (
@@ -225,7 +288,7 @@ function EventStormingApp() {
         tab={tab}
         onTabChange={setTab}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={changeSearch}
         onSearchSubmit={() => setFocusNonce((value) => value + 1)}
         matchCount={focused.matches.length}
         showWildcard={showWildcard}
@@ -236,6 +299,25 @@ function EventStormingApp() {
         onExport={() => graph && downloadJson(graph)}
         sourceLabel={sourceLabel}
       />
+
+      {/* Says what is lit and how to undo it: without a hint the faded rest of
+          the drawing looks like a fault rather than a selection. */}
+      {selectedNode && (
+        <div className="flow-focus-hint" role="status">
+          <span className="flow-focus-dot" aria-hidden />
+          <span>
+            Focus: <strong>{nodeTitle(selectedNode)}</strong>
+            <em>
+              {selectedNode.type === "groupNode"
+                ? " · this context and what it reaches"
+                : " · this card and its neighbours"}
+            </em>
+          </span>
+          <button type="button" onClick={clearFocus} title="Clear focus (Esc)">
+            ✕
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="flow-alert" role="alert">

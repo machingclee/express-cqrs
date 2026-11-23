@@ -115,6 +115,10 @@ interface FlowCanvasProps {
   layoutKey: string;
   /** Increments when Enter is pressed in the search box. */
   focusNonce: number;
+  /** A card or context box was clicked: focus it and its neighbours, or not. */
+  onNodeActivate: (node: Node) => void;
+  /** The pane was clicked: drop the focus and draw everything again. */
+  onClearFocus: () => void;
 }
 
 export default function FlowCanvas({
@@ -125,6 +129,8 @@ export default function FlowCanvas({
   fitKey,
   layoutKey,
   focusNonce,
+  onNodeActivate,
+  onClearFocus,
 }: FlowCanvasProps) {
   const { setCenter, getZoom, setViewport } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -159,9 +165,22 @@ export default function FlowCanvas({
   useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
 
   /**
-   * Double-click a card to copy its name. Nothing happens on a single click: the
-   * diagram is a picture, and a re-render between the two clicks of a
-   * double-click would stop the browser recognising the pair.
+   * A single click focuses the card: itself and the cards one edge away stay
+   * bright, everything else fades. Clicking the same card again — or the pane —
+   * brings the whole drawing back, as in the reference.
+   *
+   * A double-click copies the name. Focus only restyles the node (opacity and a
+   * class), so the element survives the re-render between the two clicks and
+   * the browser still reports the pair. Copying leaves the focus where the two
+   * toggles left it, i.e. unchanged.
+   */
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => onNodeActivate(node),
+    [onNodeActivate],
+  );
+
+  /**
+   * Double-click a card to copy its name.
    */
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -275,7 +294,9 @@ export default function FlowCanvas({
         nodes={displayNodes}
         edges={edges}
         onNodesChange={onNodesChange}
+        onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onClearFocus}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         minZoom={0.05}

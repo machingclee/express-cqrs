@@ -1,4 +1,5 @@
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
+import { laneOffsets, type EdgeSpan } from "./edgeLanes";
 import { policyFlows, policyHandles, policyRouting, type PolicyFlowView } from "./policy";
 import { flattenSchema } from "./schema";
 import {
@@ -28,7 +29,6 @@ import type {
   DtoMap,
   EventModel,
   FieldMap,
-  EventTiming,
   FlowGraph,
   PolicyModel,
   QueryModel,
@@ -58,8 +58,6 @@ export interface LabelNodeData extends Record<string, unknown> {
   icon?: string;
   payload?: FieldMap;
   dtos?: DtoMap;
-  /** `post_commit` for an event dispatched after the command commits. */
-  timing?: EventTiming;
   schemaExpanded?: boolean;
   onToggleSchema?: (nodeId: string) => void;
 }
@@ -111,12 +109,69 @@ export const nodeId = {
   group: (name: string) => `group:${name}`,
 };
 
-/** Group box width: the event column plus its card, measured from the actor column. */
-const GROUP_WIDTH = EVENT_X + NODE_WIDTH_PX - ACTOR_X + 2 * GROUP_PADDING;
+/**
+ * Column geometry. The three columns are fixed; only the gap between the
+ * command and event columns grows, because that is the gap the undo/redo shape
+ * fills — a dozen commands announcing the same event all need their own vertical
+ * run between those two columns. `EVENT_X` / `POLICY_X` in `theme.ts` stay the
+ * base positions (and the reference's), and a quiet graph still draws them.
+ */
+const BASE_COMMAND_EVENT_GAP = EVENT_X - (COMMAND_X + NODE_WIDTH_PX);
+const EVENT_POLICY_GAP = POLICY_X - (EVENT_X + NODE_WIDTH_PX);
+
+/** Room between the actor column and the command/query column. */
+const ACTOR_COMMAND_GAP = COMMAND_X - ACTOR_X - ACTOR_NODE_WIDTH_PX;
+
+/** Preferred distance between two parallel vertical runs in one gap. */
+const LANE_STEP = 25;
+/**
+ * Room reserved per extra run when sizing a gap. Slightly tighter than
+ * `LANE_STEP`: a dozen runs at 25px would push the columns apart for no gain,
+ * and at 18px they are still separate lines at a normal zoom.
+ */
+const LANE_GROWTH = 18;
+/** Closest a run may sit to the card it bends in front of. */
+const LANE_PADDING = 14;
+/** Handles sit this far outside their card (see `.react-flow__handle-*`). */
+const HANDLE_INSET = 8;
+/**
+ * How far the command → event gap may grow. Beyond this the step shrinks
+ * instead of the drawing widening further.
+ */
+const MAX_COMMAND_EVENT_GAP = 300;
+
 const GROUP_X = ACTOR_X - GROUP_PADDING;
 const REL_ACTOR_X = GROUP_PADDING;
 const REL_COMMAND_X = COMMAND_X - ACTOR_X + GROUP_PADDING;
-const REL_EVENT_X = EVENT_X - ACTOR_X + GROUP_PADDING;
+
+/** The strip a gap's vertical runs may occupy, inset from both handle lines. */
+function laneRoom(gap: number): number {
+  return Math.max(0, gap - 2 * (HANDLE_INSET + LANE_PADDING));
+}
+
+/** How wide the gap must be to seat `lanes` runs at `LANE_GROWTH` each. */
+function laneGap(lanes: number, base: number): number {
+  if (lanes <= 1) return base;
+  return Math.max(base, 2 * (HANDLE_INSET + LANE_PADDING) + (lanes - 1) * LANE_GROWTH);
+}
+
+/**
+ * The busiest command → event strip in the graph: how many edges meet at one
+ * event, or leave one command. Lanes are assigned from the measured runs later;
+ * this only decides how much room to reserve between the columns.
+ */
+function commandEventLanes(graph: FlowGraph): number {
+  const perEvent = new Map<string, number>();
+  let perCommand = 0;
+  for (const command of graph.commands) {
+    const emits = new Set(command.emits);
+    perCommand = Math.max(perCommand, emits.size);
+    for (const event of emits) perEvent.set(event, (perEvent.get(event) ?? 0) + 1);
+  }
+  let lanes = perCommand;
+  for (const count of perEvent.values()) lanes = Math.max(lanes, count);
+  return Math.max(lanes, 1);
+}
 
 // ── Height estimates (the DOM sizes the cards; these keep the gaps honest) ──
 
@@ -195,15 +250,79 @@ function policyHeight(policy: PolicyModel): number {
   return 150 + flows * 96;
 }
 
+/** A placed card, in canvas coordinates, with its estimated height. */
+type Placement = { x: number; y: number; w: number; h: number };
+
+/**
+ * Give the command → event edges their horizontal offsets.
+ *
+ * Runs are measured from the cards' vertical centres (where React Flow puts a
+ * left/right handle), then coloured across the whole column by `laneOffsets`, so
+ * edges that would overlap get different trunks and edges that never meet may
+ * share one. Runs are relative to the middle of the gap, which is what
+ * `SpreadStepEdge` adds to `centerX`.
+ */
+function applyCommandEventLanes(
+  edges: Edge[],
+  placed: Map<string, Placement>,
+  gap: number,
+): void {
+  const spans: EdgeSpan[] = [];
+  const byId = new Map<string, Edge>();
+
+  for (const edge of edges) {
+    if ((edge.data as { channel?: string } | undefined)?.channel !== "command-event") {
+      continue;
+    }
+    const source = placed.get(edge.source);
+    const target = placed.get(edge.target);
+    if (!source || !target) continue;
+    const sourceY = source.y + source.h / 2;
+    const targetY = target.y + target.h / 2;
+    spans.push({
+      id: edge.id,
+      top: Math.min(sourceY, targetY),
+      bottom: Math.max(sourceY, targetY),
+    });
+    byId.set(edge.id, edge);
+  }
+
+  const offsets = laneOffsets(spans, {
+    room: laneRoom(gap),
+    preferredStep: LANE_STEP,
+  });
+  for (const [id, offset] of offsets) {
+    const edge = byId.get(id);
+    if (!edge) continue;
+    edge.data = { ...(edge.data as Record<string, unknown>), spread: offset };
+  }
+}
+
 // ── Layout ─────────────────────────────────────────────────────────────────
 
 export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutResult {
   const { tab, expandedSchemas, onToggleSchema } = options;
   const dtos = tab === "queries" ? graph.queryDtos : graph.dtos;
 
+  /**
+   * The event column moves right when many command → event edges meet there, so
+   * each of them can have a vertical run of its own instead of stacking on one.
+   */
+  const eventGap = Math.min(
+    laneGap(
+      tab === "commands" ? commandEventLanes(graph) : 1,
+      BASE_COMMAND_EVENT_GAP,
+    ),
+    MAX_COMMAND_EVENT_GAP,
+  );
+  const eventX = COMMAND_X + NODE_WIDTH_PX + eventGap;
+  const policyX = eventX + NODE_WIDTH_PX + EVENT_POLICY_GAP;
+  const relEventX = eventX - ACTOR_X + GROUP_PADDING;
+  const groupWidth = eventX + NODE_WIDTH_PX - ACTOR_X + 2 * GROUP_PADDING;
+
   const nodes: Node[] = [];
   const edges: Edge[] = [];
-  const placed = new Map<string, { x: number; y: number; w: number; h: number }>();
+  const placed = new Map<string, Placement>();
 
   const isExpanded = (id: string) => expandedSchemas.has(id);
 
@@ -215,7 +334,6 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
     path?: string;
     icon?: string;
     payload?: FieldMap;
-    timing?: EventTiming;
   }): LabelNodeData => ({
     label: input.label,
     summary: input.summary,
@@ -223,7 +341,6 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
     path: input.path,
     icon: input.icon,
     payload: input.payload,
-    timing: input.timing,
     dtos,
     schemaExpanded: isExpanded(input.id),
     onToggleSchema,
@@ -293,16 +410,15 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
               id: eventId,
               label: event.name,
               payload: Object.keys(event.payload).length > 0 ? event.payload : undefined,
-              timing: event.timing,
             }),
-            position: { x: REL_EVENT_X, y: eventY - groupY },
+            position: { x: relEventX, y: eventY - groupY },
             parentId: groupId,
             style: { ...EVENT_STYLE },
             sourcePosition: Position.Right,
             targetPosition: Position.Left,
             draggable: true,
           });
-          placed.set(eventId, { x: EVENT_X, y: eventY, w: NODE_WIDTH_PX, h: eHeight });
+          placed.set(eventId, { x: eventX, y: eventY, w: NODE_WIDTH_PX, h: eHeight });
           eventY += Math.max(eHeight, 60) + (EVENT_STACK_GAP - 60);
           rowBottom = Math.max(rowBottom, eventY);
         });
@@ -324,16 +440,15 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
             id: eventId,
             label: event.name,
             payload: Object.keys(event.payload).length > 0 ? event.payload : undefined,
-            timing: event.timing,
           }),
-          position: { x: REL_EVENT_X, y: innerY - groupY },
+          position: { x: relEventX, y: innerY - groupY },
           parentId: groupId,
           style: { ...EVENT_STYLE },
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           draggable: true,
         });
-        placed.set(eventId, { x: EVENT_X, y: innerY, w: NODE_WIDTH_PX, h: eHeight });
+        placed.set(eventId, { x: eventX, y: innerY, w: NODE_WIDTH_PX, h: eHeight });
         innerY += Math.max(eHeight, 60) + (EVENT_STACK_GAP - 60);
       }
 
@@ -421,14 +536,14 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
                   ? query.resultPayload
                   : undefined,
             }),
-            position: { x: REL_EVENT_X, y: innerY - groupY },
+            position: { x: relEventX, y: innerY - groupY },
             parentId: groupId,
             style: { ...RESULT_STYLE },
             sourcePosition: Position.Right,
             targetPosition: Position.Left,
             draggable: true,
           });
-          placed.set(resultId, { x: EVENT_X, y: innerY, w: NODE_WIDTH_PX, h: rHeight });
+          placed.set(resultId, { x: eventX, y: innerY, w: NODE_WIDTH_PX, h: rHeight });
         }
 
         innerY += Math.max(qHeight, rHeight) + COMMAND_BLOCK_GAP;
@@ -480,13 +595,13 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
         depth: context.depth,
       } satisfies GroupNodeData,
       position: { x: GROUP_X, y: groupY },
-      width: GROUP_WIDTH,
+      width: groupWidth,
       height: groupHeight,
       draggable: true,
       selectable: true,
       focusable: true,
       zIndex: 0,
-      style: { width: GROUP_WIDTH, height: groupHeight },
+      style: { width: groupWidth, height: groupHeight },
     });
 
     cursorY = groupY + groupHeight + CONTEXT_GAP;
@@ -517,7 +632,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           label: policy.name,
           flows: policyFlows(policy),
         } satisfies PolicyNodeData,
-        position: { x: POLICY_X, y },
+        position: { x: policyX, y },
         style: {},
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
@@ -525,7 +640,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
         zIndex: 2,
       });
       placed.set(nodeId.policy(policy.name), {
-        x: POLICY_X,
+        x: policyX,
         y,
         w: Number.parseInt(POLICY_NODE_WIDTH, 10),
         h: height,
@@ -535,7 +650,17 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
   }
 
   // ── Edges ────────────────────────────────────────────────────────────────
-  const spreadArrows = (count: number, index: number) => (index - (count - 1) / 2) * 25;
+  /**
+   * Offsets for `count` parallel runs in a forward gap. The step shrinks when
+   * the gap is too narrow to hold them at the preferred spacing, so a fan never
+   * ends up drawn across a card. Omit `gap` for the open canvas behind a policy,
+   * where 25px always fits.
+   */
+  const spreadArrows = (count: number, index: number, gap = 0) => {
+    if (count <= 1) return 0;
+    const step = gap > 0 ? Math.min(LANE_STEP, laneRoom(gap) / (count - 1)) : LANE_STEP;
+    return (index - (count - 1) / 2) * step;
+  };
 
   if (tab === "commands") {
     for (const command of graph.commands) {
@@ -551,14 +676,14 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           source: actorId,
           target: nodeId.command(command.name),
           type: "spreadStep",
-          data: { spread: spreadArrows(actors.length, index) },
+          data: { spread: spreadArrows(actors.length, index, ACTOR_COMMAND_GAP) },
           animated: false,
           style: { stroke: ACTOR_EDGE_COLOR, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: ACTOR_EDGE_COLOR },
         });
       });
 
-      command.emits.forEach((eventName, index) => {
+      command.emits.forEach((eventName) => {
         if (!placed.has(nodeId.event(eventName))) return;
         edges.push({
           id: `command-${command.name}-${eventName}`,
@@ -566,7 +691,10 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           target: nodeId.event(eventName),
           type: "spreadStep",
           data: {
-            spread: spreadArrows(command.emits.length, index),
+            // The lane pass below fills in `spread` over the whole column: the
+            // runs that must not stack are the ones meeting at this event, not
+            // just this command's own emissions.
+            channel: "command-event",
             // Timing belongs to this emission, not to the event type.
             postCommit: command.postCommitEmits.includes(eventName),
           },
@@ -606,7 +734,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           target: nodeId.policy(policy.name),
           targetHandle: handle,
           type: "spreadStep",
-          data: { spread: spreadArrows(incoming.length, index) },
+          data: { spread: spreadArrows(incoming.length, index, EVENT_POLICY_GAP) },
           animated: true,
           style: { stroke: POLICY_EDGE_COLOR, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: POLICY_EDGE_COLOR },
@@ -674,7 +802,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
           source: actorId,
           target: nodeId.query(query.name),
           type: "spreadStep",
-          data: { spread: spreadArrows(actors.length, index) },
+          data: { spread: spreadArrows(actors.length, index, ACTOR_COMMAND_GAP) },
           animated: false,
           style: { stroke: ACTOR_EDGE_COLOR, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: ACTOR_EDGE_COLOR },
@@ -695,8 +823,12 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
     }
   }
 
+  // Command → event runs are assigned over the whole column: the ones that must
+  // not stack are the ones meeting at the same event or leaving the same command.
+  if (tab === "commands") applyCommandEventLanes(edges, placed, eventGap);
+
   // Canvas extent, for fit-view and the mini-map.
-  let width = GROUP_X + GROUP_WIDTH;
+  let width = GROUP_X + groupWidth;
   let height = cursorY - CONTEXT_GAP;
   for (const rect of placed.values()) {
     width = Math.max(width, rect.x + rect.w);
@@ -704,7 +836,7 @@ export function buildLayout(graph: FlowGraph, options: LayoutOptions): LayoutRes
   }
   // Only reserve the policy column when the graph actually has policies.
   if (graph.policies.length > 0 && tab === "commands") {
-    width = Math.max(width, POLICY_X + Number.parseInt(POLICY_NODE_WIDTH, 10));
+    width = Math.max(width, policyX + Number.parseInt(POLICY_NODE_WIDTH, 10));
   }
   width += GROUP_PADDING;
 

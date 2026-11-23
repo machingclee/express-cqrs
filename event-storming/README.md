@@ -163,7 +163,7 @@ Accepted details:
 | `{ "result": { … } }` or `{ "data": { … } }` | unwrapped before normalization |
 | event a command emits but the payload never lists | still drawn, using the emitting command's context |
 | event no command emits | drawn as an **external event** in its declared context (`External` when it declares none) |
-| command `postCommitEmits` | a clock on that command → event edge: the handler dispatches the event after the commit. The event card gets a `Transactional` badge only when every handler that emits it defers, so a mixed event never claims one timing |
+| command `postCommitEmits` | a clock on that command → event edge: the handler dispatches the event after the commit. Nothing is marked on the event card — the same event may be immediate from one handler and deferred from another, so only the edge can say it |
 | policy `listensTo: ["DomainEvent"]` | a wildcard listener; its edges sit behind the *wildcard listeners* switch |
 | policy `listeners` | one entry per `@EventListener` method; pairs the event with the commands that reaction sends, so the card can show — and the arrows can hit — the real routing. Without it the card tags every rule with `listensTo[0]` / `sends[0]` |
 | no policies at all | the policy column and its edges simply are not drawn (this backend excludes its development event log via `@Policy({ excludeFromFlow: true })`) |
@@ -189,7 +189,8 @@ approximation of it:
 | policies | `components/nodes/PolicyNode.tsx` ported: name, `Invariants`, numbered rules with event → command tags, colours from `--policy-bg` / `--policy-border`, and a handle per rule (`flow/policy.ts`) so each arrow enters at the rule that names it |
 | context boxes | `components/nodes/GroupNode.tsx` ported, down to the `pointerEvents` trick and the `top: -18px` badge |
 | card colours, widths, padding, font size | `flow/theme.ts`, a mirror of that project's `constants.ts` and its layout's style objects (`rgba(37,99,235,0.8)` commands, `rgba(249,115,22,0.8)` events, `rgba(250,204,21,0.9)` actors, 480px notes, 600px policies) |
-| edges | `components/edges/SpreadStepEdge.tsx` copied verbatim; same `spreadStep` type, `strokeWidth: 2`, `ArrowClosed` markers and per-kind colours |
+| edges | `components/edges/SpreadStepEdge.tsx` copied verbatim; same `spreadStep` type, `strokeWidth: 2`, `ArrowClosed` markers and per-kind colours. Where its `data.spread` comes from is this app's own lane assignment, not the reference's loop index |
+| click focus | `CommandFlowVisualizer.tsx`'s `selectedNode` / `selectedContext` rule: a click keeps the node and its direct neighbours at full opacity, fades the rest to `0.2`, its edges to `0.1`, and thickens the live edges. Context boxes fade to `0.5` instead of `0.2`: a box is an ancestor of its cards, so its opacity multiplies theirs, and at `0.2` a fading box's cards would all but disappear |
 
 The app shell it does not have — the loading/error panels — uses its modal palette
 (`#1e293b` on `#475569`, `.btn-primary` / `.btn-secondary`), so nothing on screen
@@ -215,12 +216,14 @@ actors  →  commands  →  events  →  policies
 
 - **Actor** (yellow) — the principal declared by `@Actor(...)`; it fans out to
   every command it starts.
-- **Command** (blue) — name, handler, `transactional` badge, payload schema.
-- **Event** (orange) — name, who emits it, who listens, payload schema. The
-  events of a command sit beside it, so each row reads as one step of the flow.
-  A command → event edge whose emission is declared `afterCommit` carries a clock
-  at its bend, so a delayed side effect is not mistaken for part of the write; the
-  event card adds a `Transactional` badge when every emitter defers.
+- **Command** (blue) — name, optional summary, HTTP method and path, payload
+  schema.
+- **Event** (orange) — name, payload schema. The events of a command sit beside
+  it, so each row reads as one step of the flow. A command → event edge whose
+  emission is declared `afterCommit` carries a clock at its bend, so a delayed
+  side effect is not mistaken for part of the write. The event card is never
+  marked: the same event can be immediate from one handler and deferred from
+  another, so the marker belongs to the emission's line.
 - **Policy** (purple) — subscribers, dispatched commands and `@Invariant` rules;
   placed in the band that owns most of the events it listens to. The card gets
   one row per reaction a listener method declares (`listeners` in the payload),
@@ -237,15 +240,44 @@ actors  →  commands  →  events  →  policies
 Edge colours: amber actor → command, blue command → event, purple event →
 policy, dashed purple policy → command, faint dotted wildcard subscription.
 
+### One vertical run per edge
+
+Every edge bends in the gap between its two columns. Those runs are assigned so
+that two edges never share one where they would overlap: the busiest fan gets a
+lane each, an edge whose run never meets another's may reuse one. That matters
+for the undo/redo shape — a dozen commands announcing the same happened-event —
+where offsetting each edge by its position in its own loop (the reference's
+rule) puts every one of them on offset 0 and the merge reads as a single line.
+
+![Twelve commands announcing one event: one vertical run each](docs/fan-in-screenshot.png)
+
+The command → event gap widens when the graph needs the room (up to a limit, past
+which the step tightens instead), and the gap-aware step also keeps other fans —
+many actors on one command, many events into one policy — from spilling over the
+cards they pass.
+
+### Transactional is a property of the emission
+
+A command → event edge whose emission is dispatched after the commit carries a
+clock at its bend. The event card never claims it: the same event may be
+immediate from one handler and deferred from another, so only the line can say
+which emission defers. Hover the clock for the full wording.
+
+![A clock on each post-commit edge; nothing on the event card](docs/transactional-screenshot.png)
+
 Interactions:
+
+![Clicking a card leaves it and its neighbours lit and fades the rest](docs/focus-screenshot.png)
 
 | Action | Result |
 | --- | --- |
+| click a card | focuses it: the card and everything one edge away — its actors on the left, its events, policies or read model on the right — stay bright, everything else fades. Click it again, click the background or press `Esc` to show the whole drawing |
+| click a context badge | focuses that context: every card in the box plus whatever its cards reach |
 | drag a card | moves that card |
 | drag a context badge | moves the whole context box with its cards |
 | double-click a card | copies its name to the clipboard; the label flashes `✓ Copied` for 1.5s (context boxes are skipped, as in the reference) |
 | click `▸ Schema (n)` | opens the payload schema inside the card |
-| type in search (`/` to focus) | non-matching cards dim; the badge counts matches |
+| type in search (`/` to focus) | non-matching cards dim; the badge counts matches. Typing replaces a card/context focus, and clicking a card clears the query — the drawing shows one focus at a time |
 | `Esc` in the search box | clears the search |
 | `Enter` in search | pans to the next match |
 | **Reload** | re-reads `GET /docs/commands` (the diagram tracks the running code) |
@@ -281,7 +313,8 @@ src/
     schema.ts     payload → `field: Type` lines (nested DTOs, depth cap)
     policy.ts     a policy's rule rows and their edge anchors (shared by the layout and the card)
     layout.ts     group + card geometry, node styles, edges; positions are relative
-    focus.ts      search dimming, applied over the current node positions
+    edgeLanes.ts  where each edge's vertical run sits (interval colouring over the gap)
+    focus.ts      search dimming and click focus, applied over the current node positions
     load.ts       the endpoint (same origin), plus file / paste / URL side doors
   components/
     Toolbar.tsx   tab bar, search, actions — the reference's floating chrome
@@ -315,6 +348,17 @@ and no per-node state, so the same JSON always draws the same picture.
   button (and the toolbar's **Fit**) still give the overview.
 - **Collapsed payloads by default.** Like the reference, a card shows `▸ Schema (n)`
   until it is clicked open; nested DTOs open one level deep.
+- **The focused card says so.** The reference only fades its neighbours; here the
+  clicked card also gets a ring and a small hint at the bottom names it ("Focus:
+  `CreateFolderCommand`"), because a faded drawing with no visible cause reads as
+  a fault. The hint's ✕ and `Esc` both clear the focus.
+- **Fan-ins get one run per edge.** The reference computes an edge's horizontal
+  offset from its index inside its own loop, so N commands emitting the same
+  event all get offset 0 and stack on one vertical line. Here the runs are
+  coloured over the whole column (`flow/edgeLanes.ts`) and the gap grows to seat
+  them, because the undo/redo model — every command paired with an opposite twin
+  that emits the same event — makes that fan-in the common shape rather than an
+  edge case.
 
 ## Where the data comes from
 

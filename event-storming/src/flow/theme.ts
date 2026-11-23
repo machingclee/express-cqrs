@@ -17,7 +17,14 @@ export const NODE_WIDTH = "480px";
 export const ACTOR_NODE_WIDTH = "160px";
 export const POLICY_NODE_WIDTH = "600px";
 
-/** Column X positions on the canvas (absolute). */
+/**
+ * Column X positions on the canvas, as absolute base positions.
+ *
+ * The event column is a base, not a fixed line: `layout.ts` widens the
+ * command → event gap when a fan-in needs more than one vertical run there (and
+ * moves the policy column along with it), so a quiet graph draws exactly these
+ * and a dense fan-in gets the room it needs.
+ */
 export const ACTOR_X = 40;
 export const COMMAND_X = 280;
 export const EVENT_X = 860;

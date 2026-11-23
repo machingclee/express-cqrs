@@ -1,7 +1,8 @@
 /**
  * Clock glyph for an emission that is dispatched after the command transaction
- * commits. Used on the command -> event edge, and on the event card when every
- * emitter agrees, so the reader sees the same symbol in both places.
+ * commits. It sits on the command -> event edge itself: whether an event is
+ * transactional depends on the emission, not on the event, so the card must not
+ * claim it.
  */
 export function AfterCommitIcon({ size = 13 }: { size?: number }) {
   return (

@@ -108,7 +108,13 @@ npm run build                  # tsc + copy that folder into dist/
 
 The page reads `GET /docs/commands` from whatever host app serves it, so it always
 draws the running domain model; double-clicking a node copies its name, and
-`▸ Schema (n)` opens a node's payload fields.
+`▸ Schema (n)` opens a node's payload fields. Clicking a node focuses it: the node
+and its neighbours (its actors on the left, its events, policies or read model on
+the right) stay bright while everything else fades. Clicking the background,
+pressing `Esc`, or clicking the node again brings the whole drawing back; clicking
+a context badge focuses that context instead. Edges get one vertical run each
+between the columns, so the undo/redo shape — a dozen commands announcing the
+same event — stays traceable instead of collapsing into a single line.
 
 ## `createCqrs` vs `initializeCqrs`
 
@@ -196,9 +202,9 @@ handler:
 Every `afterCommit` entry must also be in `emits`. The handler then enqueues that
 event with `addTransactional`; `add` throws, so the declaration and the call site
 cannot disagree. `GET /docs/commands` reports the declaration as
-`postCommitEmits`, the event-storming diagram puts a clock on that command → event
-edge, and the event card carries a `Transactional` badge only when every handler
-that emits it defers.
+`postCommitEmits`, and the event-storming diagram puts a clock on that command →
+event edge. The event card itself is never marked: whether an event is
+transactional depends on the emission, so the marker belongs to the line.
 
 ## Audit
 

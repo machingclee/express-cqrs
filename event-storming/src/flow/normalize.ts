@@ -427,14 +427,6 @@ function buildGraph(input: BuildGraphInput): FlowGraph {
       emittedBy,
       listenedBy: listenersOf(name),
       payload: input.eventPayload ? input.eventPayload(name) : {},
-      // The card may only claim one timing when every emitter agrees; a mixed
-      // event stays unmarked and its edges carry the answer.
-      timing: (() => {
-        const emitters = input.commands.filter((command) => command.emits.includes(name));
-        const deferred = emitters.filter((command) => command.postCommitEmits.includes(name));
-        if (emitters.length === 0 || deferred.length === 0) return "immediate";
-        return deferred.length === emitters.length ? "post_commit" : "mixed";
-      })(),
       external: emittedBy.length === 0,
     };
   });

@@ -137,27 +137,27 @@ const SpreadStepEdge = ({
       {postCommit && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan"
-            title="Dispatched after the command transaction commits"
-            aria-label="after commit"
+            className="nodrag nopan nowheel"
+            title="Transactional: this emission is dispatched after the command commits"
+            aria-label="transactional, dispatched after the commit"
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 20,
-              height: 20,
+              width: 22,
+              height: 22,
               borderRadius: "50%",
               background: "#1e293b",
-              border: "1px solid rgba(255,255,255,0.75)",
+              border: "1.5px solid rgba(255,255,255,0.9)",
               color: "#fff",
-              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.35)",
+              boxShadow: "0 1px 4px rgba(15, 23, 42, 0.45)",
               pointerEvents: "all",
               cursor: "help",
             }}
           >
-            <AfterCommitIcon size={12} />
+            <AfterCommitIcon size={13} />
           </div>
         </EdgeLabelRenderer>
       )}
