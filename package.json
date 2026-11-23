@@ -1,6 +1,6 @@
 {
   "name": "@machingclee/express-cqrs",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Dependency-free CQRS runtime for Express applications with explicit decorators, DI, transactions, audit ports and an optional event-storming UI.",
   "type": "module",
   "license": "MIT",
@@ -23,7 +23,6 @@
     "dev:event-storming": "cd event-storming && npm run dev",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "publish": "npm publish --access public",
     "unpublish": "express-prisma-cqrs"
   },
   "dependencies": {
