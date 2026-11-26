@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
 import type { FlowGraph } from "../flow/types";
 import type { LayoutTab, LayoutResult } from "../flow/layout";
+import SearchBar from "./SearchBar";
 
 /**
  * The floating chrome of `echarge-event-storming-component`: a centred tab bar
@@ -21,8 +21,8 @@ interface ToolbarProps {
   onTabChange: (tab: LayoutTab) => void;
   search: string;
   onSearchChange: (value: string) => void;
-  onSearchSubmit: () => void;
-  matchCount: number;
+  /** Jump to the card behind a search result (switching tabs if needed). */
+  onNavigate: (nodeId: string, tab: LayoutTab) => void;
   showWildcard: boolean;
   onToggleWildcard: () => void;
   onFitAll: () => void;
@@ -41,8 +41,7 @@ export default function Toolbar({
   onTabChange,
   search,
   onSearchChange,
-  onSearchSubmit,
-  matchCount,
+  onNavigate,
   showWildcard,
   onToggleWildcard,
   onFitAll,
@@ -51,22 +50,6 @@ export default function Toolbar({
   onExport,
   sourceLabel,
 }: ToolbarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // "/" focuses the search box, as in the reference.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
-      if (event.key === "/" && !typing) {
-        event.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   const tabBtn = (value: LayoutTab) => {
     const active = tab === value;
     return {
@@ -125,29 +108,12 @@ export default function Toolbar({
           card is selected — a moving toolbar can eat the second click of a
           double-click. */}
       <div className="flow-toolbar">
-        <div className="flow-search">
-          <input
-            ref={inputRef}
-            className="flow-search-input"
-            value={search}
-            placeholder="Search names, payload fields…  ( / )"
-            disabled={!graph}
-            onChange={(event) => onSearchChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onSearchSubmit();
-              if (event.key === "Escape") onSearchChange("");
-            }}
-          />
-          {search.trim().length > 0 && (
-            <div className="flow-search-filter">
-              {matchCount === 0 ? "no match" : `${matchCount} match${matchCount === 1 ? "" : "es"}`}
-              <span className="flow-search-filter-label">· ⏎ to step</span>
-              <span className="flow-search-filter-clear" onClick={() => onSearchChange("")}>
-                ✕
-              </span>
-            </div>
-          )}
-        </div>
+        <SearchBar
+          graph={graph}
+          value={search}
+          onChange={onSearchChange}
+          onNavigate={onNavigate}
+        />
 
         <div className="flow-toolbar-row">
           <button type="button" className="flow-btn flow-btn-ghost" onClick={onOpenLoad}>

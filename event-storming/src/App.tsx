@@ -32,6 +32,12 @@ const EMPTY_GRAPH: FlowGraph = {
   externalContexts: [],
 };
 
+/** A request to centre one card, minted when a search result is chosen. */
+interface FocusRequest {
+  id: string;
+  nonce: number;
+}
+
 function storedToken(): string {
   try {
     return window.localStorage.getItem(TOKEN_KEY) ?? "";
@@ -96,7 +102,12 @@ function EventStormingApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWildcard, setShowWildcard] = useState(true);
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
-  const [focusNonce, setFocusNonce] = useState(0);
+  /**
+   * Bumped when a search result is chosen, so the canvas centres that card even
+   * when the same card is chosen twice or the tab had to switch first.
+   */
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const focusNonce = useRef(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -205,10 +216,27 @@ function EventStormingApp() {
     setSelectedId(null);
   }, []);
 
-  // A new graph or tab draws different cards; a stale id must not dim anything.
+  /**
+   * A search result: open the tab its card lives on, focus it, and ask the
+   * canvas to centre it. The query goes away so the focus hint describes what
+   * is on screen.
+   */
+  const navigateToNode = useCallback((targetId: string, targetTab: LayoutTab) => {
+    setTab(targetTab);
+    setSearch("");
+    setSelectedId(targetId);
+    focusNonce.current += 1;
+    setFocusRequest({ id: targetId, nonce: focusNonce.current });
+  }, []);
+
+  // A tab switch draws a different set of cards; drop an id that no longer
+  // exists rather than dimming the whole drawing for a card that is gone. An id
+  // chosen from the search is set together with its tab, so it survives here.
   useEffect(() => {
-    setSelectedId(null);
-  }, [graph, tab]);
+    if (selectedId && !layout.nodes.some((node) => node.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [layout, selectedId]);
 
   // Escape returns the whole drawing, like clicking the background.
   useEffect(() => {
@@ -254,11 +282,10 @@ function EventStormingApp() {
           <FlowCanvas
             nodes={focused.nodes}
             edges={focused.edges}
-            matches={focused.matches}
             contentWidth={layout.width}
             fitKey={`${sourceLabel}|${tab}|${graph.title}`}
             layoutKey={`${sourceLabel}|${tab}|${showWildcard}|${graph.title}|${[...expandedSchemas].sort().join(",")}`}
-            focusNonce={focusNonce}
+            focusRequest={focusRequest}
             onNodeActivate={activateNode}
             onClearFocus={clearFocus}
           />
@@ -289,8 +316,7 @@ function EventStormingApp() {
         onTabChange={setTab}
         search={search}
         onSearchChange={changeSearch}
-        onSearchSubmit={() => setFocusNonce((value) => value + 1)}
-        matchCount={focused.matches.length}
+        onNavigate={navigateToNode}
         showWildcard={showWildcard}
         onToggleWildcard={() => setShowWildcard((value) => !value)}
         onFitAll={() => fitView({ padding: 0.15, duration: 400 })}

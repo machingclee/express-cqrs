@@ -184,7 +184,8 @@ approximation of it:
 | Piece | Where it comes from |
 | --- | --- |
 | stylesheet | that project's `index.css`, copied verbatim into `src/index.css` (only the three `@tailwind` directives are dropped — this project has no Tailwind build, and the reference uses no utility classes beyond one `w-screen h-screen`, replaced by `.flow-app`) |
-| bounds, action buttons, search box | the same `.flow-toolbar`, `.flow-btn`, `.flow-search-input` classes that stylesheet defines |
+| bounds, action buttons, search box | the same `.flow-toolbar`, `.flow-btn`, `.flow-search-input` classes that stylesheet defines. The results popover is this app's `.search-popover` / `.search-result` CSS, on the same palette |
+| search results | `components/SearchBar.tsx` ported from the reference: a popover under the box, `↑` / `↓` / `Enter`, token highlighting, and a space read as `.*`; the rows are built from this app's normalized graph (`flow/search.ts`), so contexts, rules and actors are searchable too |
 | sticky notes | `components/nodes/LabelNode.tsx` ported: centred label, optional summary, HTTP row, collapsible `▸ Schema (n)` block with 11px monospace lines |
 | policies | `components/nodes/PolicyNode.tsx` ported: name, `Invariants`, numbered rules with event → command tags, colours from `--policy-bg` / `--policy-border`, and a handle per rule (`flow/policy.ts`) so each arrow enters at the rule that names it |
 | context boxes | `components/nodes/GroupNode.tsx` ported, down to the `pointerEvents` trick and the `top: -18px` badge |
@@ -277,9 +278,9 @@ Interactions:
 | drag a context badge | moves the whole context box with its cards |
 | double-click a card | copies its name to the clipboard; the label flashes `✓ Copied` for 1.5s (context boxes are skipped, as in the reference) |
 | click `▸ Schema (n)` | opens the payload schema inside the card |
-| type in search (`/` to focus) | non-matching cards dim; the badge counts matches. Typing replaces a card/context focus, and clicking a card clears the query — the drawing shows one focus at a time |
-| `Esc` in the search box | clears the search |
-| `Enter` in search | pans to the next match |
+| type in search (`/` to focus) | matches open in a popover directly under the box — commands, events, policies, each invariant, queries, results, context boxes and actors — while non-matching cards also dim. A space means "anything in between" (`Create Folder` matches `CreateFolderCommand`, `folder_id` and "a Notes folder"); `↑` / `↓` and `Enter` pick a result. Typing replaces a card/context focus, and clicking a card clears the query — the drawing shows one focus at a time |
+| `Enter` on a search result (or click it) | selects that card, switches to its tab when needed, and centres it on the canvas |
+| `Esc` in the search box | clears the query, closes the list and shows the whole drawing again |
 | **Reload** | re-reads `GET /docs/commands` (the diagram tracks the running code) |
 | **Fit** (or the canvas controls' fit button) | zooms out to the whole drawing |
 | drag a `.json` file onto the window | loads it for inspection |
@@ -314,10 +315,12 @@ src/
     policy.ts     a policy's rule rows and their edge anchors (shared by the layout and the card)
     layout.ts     group + card geometry, node styles, edges; positions are relative
     edgeLanes.ts  where each edge's vertical run sits (interval colouring over the gap)
+    search.ts     query → `/a.*b/i`; the one rule the search box and the dimming share
     focus.ts      search dimming and click focus, applied over the current node positions
     load.ts       the endpoint (same origin), plus file / paste / URL side doors
   components/
     Toolbar.tsx   tab bar, search, actions — the reference's floating chrome
+    SearchBar.tsx  the reference's search popover, fed by the normalized graph
     FlowCanvas.tsx  React Flow canvas, node-position state (for dragging), framing
     EndpointStatus.tsx  loading and "could not load the graph" states (+ token prompt)
     nodes/LabelNode.tsx   the reference's note: label, summary, HTTP row, schema

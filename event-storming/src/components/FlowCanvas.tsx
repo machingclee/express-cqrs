@@ -103,8 +103,6 @@ interface FlowCanvasProps {
   edges: Edge[];
   /** Width of the laid-out drawing, for the initial framing. */
   contentWidth: number;
-  /** Ids of the nodes that match the current search, for Enter-stepping. */
-  matches: string[];
   /** Changes when the drawing should be re-fitted (new graph or tab). */
   fitKey: string;
   /**
@@ -113,8 +111,11 @@ interface FlowCanvasProps {
    * card the user has dragged, so it is not part of this key.
    */
   layoutKey: string;
-  /** Increments when Enter is pressed in the search box. */
-  focusNonce: number;
+  /**
+   * A card chosen from the search: centre it once it exists on the canvas. The
+   * nonce makes choosing the same card twice centre it twice.
+   */
+  focusRequest: { id: string; nonce: number } | null;
   /** A card or context box was clicked: focus it and its neighbours, or not. */
   onNodeActivate: (node: Node) => void;
   /** The pane was clicked: drop the focus and draw everything again. */
@@ -125,17 +126,20 @@ export default function FlowCanvas({
   nodes: incomingNodes,
   edges,
   contentWidth,
-  matches,
   fitKey,
   layoutKey,
-  focusNonce,
+  focusRequest,
   onNodeActivate,
   onClearFocus,
 }: FlowCanvasProps) {
-  const { setCenter, getZoom, setViewport } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fitted = useRef("");
-  const matchCursor = useRef(0);
+  /**
+   * Until this timestamp a search result owns the viewport; the automatic
+   * framing of a tab switch must not throw its card back to the top-left.
+   */
+  const focusUntil = useRef(0);
 
   /**
    * Drag needs React Flow to own the positions: the `nodes` prop is a snapshot,
@@ -253,28 +257,51 @@ export default function FlowCanvas({
     if (fitted.current === fitKey) return;
     const timers = [80, 340].map((delay) =>
       window.setTimeout(() => {
-        frame();
+        // A search result chosen just now owns the viewport; framing here would
+        // throw its card back to the top-left.
+        if (Date.now() >= focusUntil.current) frame();
         if (delay === 340) fitted.current = fitKey;
       }, delay),
     );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [fitKey, frame]);
 
-  // Enter in the search box steps through the matches.
+  /**
+   * A card chosen from the search: centre it. The node may not be on the canvas
+   * yet — a query result can switch the tab first — so the request is held and
+   * retried whenever the node list changes. Two timers because React Flow
+   * measures the cards over the first frames after a tab switch.
+   */
+  const pendingFocus = useRef<{ id: string; nonce: number } | null>(null);
+  const focusTimers = useRef<number[]>([]);
+
   useEffect(() => {
-    if (focusNonce === 0) return;
-    if (matches.length === 0) return;
-    const targets = nodes.filter((node) => matches.includes(node.id));
-    if (targets.length === 0) return;
-    const target = targets[matchCursor.current % targets.length];
-    matchCursor.current += 1;
-    const width = target.measured?.width ?? (target.width as number | undefined) ?? 480;
-    const height = target.measured?.height ?? (target.height as number | undefined) ?? 120;
-    setCenter(target.position.x + width / 2, target.position.y + height / 2, {
-      zoom: Math.max(getZoom(), 0.85),
-      duration: 450,
-    });
-  }, [focusNonce, matches, incomingNodes, setCenter, getZoom]);
+    if (focusRequest) pendingFocus.current = focusRequest;
+  }, [focusRequest]);
+
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    if (!nodes.some((node) => node.id === pending.id)) return;
+    pendingFocus.current = null;
+    focusUntil.current = Date.now() + 700;
+    focusTimers.current.forEach((timer) => window.clearTimeout(timer));
+    focusTimers.current = [60, 320].map((delay) =>
+      window.setTimeout(() => {
+        void fitView({
+          nodes: [{ id: pending.id }],
+          padding: 0.5,
+          duration: 420,
+          maxZoom: 1.2,
+        });
+      }, delay),
+    );
+  }, [focusRequest, nodes, fitView]);
+
+  useEffect(
+    () => () => focusTimers.current.forEach((timer) => window.clearTimeout(timer)),
+    [],
+  );
 
   if (incomingNodes.length === 0) {
     return (

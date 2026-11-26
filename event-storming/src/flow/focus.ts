@@ -1,4 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
+import { buildTokenRegex, matchesQuery } from "./search";
 
 /**
  * Focus — the search's highlight and the click-to-inspect dimming.
@@ -52,6 +53,14 @@ function haystack(node: Node): string {
     const value = data[key];
     if (typeof value === "string") parts.push(value);
   }
+  // Payload fields are searchable too: the search box has always promised
+  // "payload fields", and the schema block on the card shows them.
+  const payload = data.payload;
+  if (payload && typeof payload === "object") {
+    for (const [field, type] of Object.entries(payload)) {
+      parts.push(field, String(type ?? ""));
+    }
+  }
   const flows = data.flows;
   if (Array.isArray(flows)) {
     for (const flow of flows) {
@@ -59,7 +68,7 @@ function haystack(node: Node): string {
       parts.push(record.fromEvent ?? "", record.toCommand ?? "", record.invariant ?? "");
     }
   }
-  return parts.join(" ").toLowerCase();
+  return parts.join(" ");
 }
 
 const isContextBox = (node: Node): boolean => node.type === "groupNode";
@@ -117,7 +126,9 @@ export function focusGraph(
   edges: Edge[],
   options: FocusOptions,
 ): FocusedGraph {
-  const query = options.search.trim().toLowerCase();
+  // Spaces in the query mean "anything between these", as in the reference:
+  // `Create Folder` lights `CreateFolderCommand`.
+  const tokenRegex = buildTokenRegex(options.search);
   const selected = options.selected
     ? nodes.find((node) => node.id === options.selected) ?? null
     : null;
@@ -127,11 +138,17 @@ export function focusGraph(
 
   if (selected) {
     lit = expand(nodes, edges, coreOf(nodes, selected));
-  } else if (query) {
+  } else if (tokenRegex) {
     const matched = new Set<string>();
     for (const node of nodes) {
-      if (isContextBox(node)) continue;
-      if (haystack(node).includes(query)) matched.add(node.id);
+      if (!matchesQuery(haystack(node), tokenRegex)) continue;
+      if (isContextBox(node)) {
+        // A matching context box lights itself and every card inside it, the
+        // same answer clicking its badge gives.
+        for (const id of coreOf(nodes, node)) matched.add(id);
+      } else {
+        matched.add(node.id);
+      }
     }
     matches = [...matched];
     lit = expand(nodes, edges, matched);
